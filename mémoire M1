@@ -1,0 +1,912 @@
+library("readxl")
+library(dplyr)
+library(tidyselect)
+library(data.table)
+library(stargazer)
+library(car)
+library(forcats)
+library(xtable)
+library(Hmisc)
+library(tables)
+library(memisc)
+#-------------------
+#Importation données
+#-------------------
+data<- read_excel("C:/Users/PC/Desktop/travail annif/Re Choix de Mémoire DCarver/base de données.xlsx")
+
+
+#-----------------------
+#Manipulation de données
+#-----------------------
+
+#Création de deux variables en combinant plusieurs variables pour le premier et une simplification pour le deuxieme
+
+#Si travail dans un autre établissement de santé; oui=1 et non=0
+data$s2_21<-if_else(data$s2_21_1=="Oui"|
+                    data$s2_21_2=="Oui"|
+                    data$s2_21_3=="Oui"|
+                    data$s2_21_1=="Oui"|
+                    data$s2_21_1=="Oui"|
+                    data$s2_21_1=="Oui"|
+                    data$s2_21_1=="Oui","Oui","Non")
+
+#Si n'ettoie eux-meme leur locaux=1 sinon non=0
+data$s1_18_1bis<-if_else(data$s1_18_1=="Vous-même","Moi-même","Autre")
+
+#Prend uniquement les variables qui m'intéresse
+data1<- subset(data,select = c(region,s1_1,s2_30,s3_10,s3_10_1,s2_37,s2_37_1,sexe,s4_2,s2_21,s2_19,
+                               s2_15,s2_13,s2_32,s2_40,s2_39,s1_18_1bis,s1_21,s3_5_1,
+                               s3_5_2,s3_1,s3_3_2))
+
+#Eliminie données manquantes
+data2<-subset(data1, s3_10!="999999")
+data3<-subset(data2, s3_10_1!="ne sait pas (ne pas citer)")
+data4<-subset(data3, s3_10_1!="NR")
+
+#Attribue revenu moyen aux observations manquantes
+data4[data4$s3_10_1=="Moins de 25 000 (moins de 164 000 Francs)",]$s3_10<-12500
+data4[data4$s3_10_1=="De 25 000 à 50 000 (de 164 000 à 328000 F)",]$s3_10<- 37500
+data4[data4$s3_10_1=="De 50 000 à 75 000 (de 328 000 à 4682 000F)",]$s3_10<- 62500
+data4[data4$s3_10_1=="De 75 000 à 100 000 (de 492 000 à 656 000F)",]$s3_10<- 87500
+data4[data4$s3_10_1=="De 100 000 à 150 000 (de 656 000 à 984 000F",]$s3_10<- 125000
+data4[data4$s3_10_1=="De 150 000 à 200 000 (de 984 000 à 1 312 00",]$s3_10<- 175000
+data4[data4$s3_10_1=="200 000 ou plus (plus de 1 312 000 F)",]$s3_10<- 200000
+
+#Somme des personnes à charge
+data4$s3_5<-data4$s3_5_1+data4$s3_5_2
+#Base de données final
+data5<-subset(data4,select = c(region,s1_1,s2_30,s3_10,s2_37,sexe,s4_2,s2_21,s2_19,
+                               s2_15,s2_13,s2_32,s2_40,s2_39,s1_18_1bis,s1_21,s3_5,
+                               s3_1,s3_3_2))
+
+setnames(data5,c("region","s1_1","s2_30","s3_10","s2_37","s4_2","s2_21","s2_19","s2_15","s2_13","s2_32","s2_40","s2_39","s1_18_1bis",
+                 "s1_21","s3_5","s3_1","s3_3_2"),
+         c("region","Exercer_en_groupeoui_ou_seul","Temps_de_travail","Revenu_annuel","Durée_consultation","Proche_de_la_retraite","Autre_activité","Médecin_coordonateur_maison_retraite",
+           "Garde","Médecin_régulateur","Consulte_patients","Rythme_des_rdv","Intercaler_patients","Entretien_locaux",
+           "Secrétariat","Personnes_à_charge","Couple","Conjoint_sur_marché_du_travail"))
+data5<-subset(data5, Proche_de_la_retraite!="NR")
+data5<-subset(data5, Proche_de_la_retraite!="NSP")
+data5<-subset(data5, Proche_de_la_retraite!="Oui, pour exercer uniquement comme m")
+data5<-subset(data5, Proche_de_la_retraite!="Oui, pour changer d'activité profess")
+
+data5$Temps_de_travail<-as.numeric(data5$Temps_de_travail)
+data6<-na.omit(data5)
+data6<-subset(data6, Exercer_en_groupeoui_ou_seul!="Non")
+data6$Exercer_en_groupeoui_ou_seul<-if_else(data6$Exercer_en_groupeoui_ou_seul=="Oui","En groupe","Seul")
+data6<-subset(data6, Personnes_à_charge!="7")
+data6<-subset(data6, Personnes_à_charge!="8")
+data6<-subset(data6, Personnes_à_charge!="10")
+data6<-subset(data6, Personnes_à_charge!="16")
+data6<-subset(data6, Personnes_à_charge!="30")
+data6[data6$Rythme_des_rdv==".",]$Rythme_des_rdv<-"NR"
+data6[data6$Rythme_des_rdv=="NSP",]$Rythme_des_rdv<-"NR"
+data6<-subset(data6,Intercaler_patients!="." )
+data6[data6$Conjoint_sur_marché_du_travail==".",]$Conjoint_sur_marché_du_travail<-"NR"
+data6[data6$Conjoint_sur_marché_du_travail=="NSP",]$Conjoint_sur_marché_du_travail<-"NR"
+
+#Tasser les modalités
+data6$Intercaler_patients[data6$Intercaler_patients=="De temps en temps"]<- "Rarement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Jamais ou exceptionnellement"]<- "Rarement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Tous les jours de consultation"]<- "Quotidiennement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Toutes les semaines"]<-"Quotidiennement"
+
+data6$Personnes_à_charge[data6$Personnes_à_charge=="1"]<-"1"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="2"]<-"2"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="3"]<-"[3;4]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="4"]<-"[3;4]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="5"]<-"[5;6]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="6"]<-"[5;6]"
+
+data6$Rythme_des_rdv[data6$Rythme_des_rdv=="10 minutes"]<-"[10;15]"
+data6$Rythme_des_rdv[data6$Rythme_des_rdv=="15 minutes"]<-"[10;15]"
+data6$Rythme_des_rdv[data6$Rythme_des_rdv=="20 minutes"]<-"[20;30]"
+data6$Rythme_des_rdv[data6$Rythme_des_rdv=="30 minutes"]<-"[20;30]"
+
+data6$Consulte_patients[data6$Consulte_patients=="Vous êtes fréquemment conduits à différer des demandes de co"]<-"Consulte avec difficulté"
+data6$Consulte_patients[data6$Consulte_patients=="Vous recevez tout le monde mais vous devez pour cela travail"]<-"Consulte avec difficulté"
+data6$Consulte_patients[data6$Consulte_patients=="Vous parvenez à voir tous les patients qui vous sollicitent"]<-"Consulte sans difficulté"
+
+data6$region[data6$region=="BRE"]<-"Bretagne"
+data6$region[data6$region=="PDL"]<-"Pays de la Loire"
+data6$region[data6$region=="PAY"]<-"Pays de la Loire"
+data6$region[data6$region=="BAN"]<-"Normandie"
+data6$region[data6$region=="HAN"]<-"Normandie"
+data6$region[data6$region=="NOR"]<-"Hauts-de-France"
+data6$region[data6$region=="NOR1"]<-"Hauts-de-France"
+data6$region[data6$region=="PACA"]<-"Hauts-de-France"
+data6$region[data6$region=="PIC"]<-"Hauts-de-France"
+data6$region[data6$region=="PIC1"]<-"Hauts-de-France"
+data6$region[data6$region=="IDF"]<-"Ile de France"
+data6$region[data6$region=="IDF1"]<-"Ile de France"
+data6$region[data6$region=="ALS"]<-"Grand Est"
+data6$region[data6$region=="CHA"]<-"Grand Est"
+data6$region[data6$region=="CHA1"]<-"Grand Est"
+data6$region[data6$region=="LOR"]<-"Grand Est"
+data6$region[data6$region=="LOR1"]<-"Grand Est"
+data6$region[data6$region=="CEN"]<-"Centre"
+data6$region[data6$region=="CEN1"]<-"Centre"
+data6$region[data6$region=="BOU"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="BOU1"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="FRA"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="AQU"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="AQU1"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="LIM"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="LIM1"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="POI"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="AUV"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="AUV1"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="RHO"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="RHO1"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="LAN"]<-"Occitanie"
+data6$region[data6$region=="LAN1"]<-"Occitanie"
+data6$region[data6$region=="MID"]<-"Occitanie"
+data6$region[data6$region=="PRO"]<-"Provence-Alpes-Cote d'Azur"
+table(data6$Intercaler_patients)
+table(data6$region)
+table(data6$Consulte_patients)
+table(data6$Rythme_des_rdv)
+data6<-subset(data6, Rythme_des_rdv!="NR")
+data6<-subset(data6, Consulte_patients!="NR")
+data6<-subset(data6, Médecin_régulateur!="NR")
+
+#variable discrétiser
+
+data6$tps_cat <- cut(data6$Temps_de_travail, breaks = c(0,35,45,55,65,75,85,Inf))
+data6$cattps[data6$Temps_de_travail >0  & data6$Temps_de_travail <= 35] <- 1
+data6$cattps[data6$Temps_de_travail >35  & data6$Temps_de_travail <= 45] <- 2
+data6$cattps[data6$Temps_de_travail >45  & data6$Temps_de_travail <= 55] <- 3
+data6$cattps[data6$Temps_de_travail >55  & data6$Temps_de_travail <= 65] <- 4
+data6$cattps[data6$Temps_de_travail >65  & data6$Temps_de_travail <= 75] <- 5
+data6$cattps[data6$Temps_de_travail >75  & data6$Temps_de_travail <= 85] <- 6
+data6$cattps[data6$Temps_de_travail >85 ] <- 7
+table(data6$tps_cat)
+table(data6$cattps)
+
+data6$dc_cat <- cut(data6$Durée_consultation, breaks = c(0,5,10,15,20,25,30,Inf))
+data6$catdc[data6$Durée_consultation >0  & data6$Durée_consultation <= 5] <- 1
+data6$catdc[data6$Durée_consultation >5  & data6$Durée_consultation <= 10] <- 2
+data6$catdc[data6$Durée_consultation >10  & data6$Durée_consultation <= 15] <- 3
+data6$catdc[data6$Durée_consultation >15  & data6$Durée_consultation <= 20] <- 4
+data6$catdc[data6$Durée_consultation >20  & data6$Durée_consultation <= 25] <- 5
+data6$catdc[data6$Durée_consultation >25  & data6$Durée_consultation <= 30] <- 6
+data6$catdc[data6$Durée_consultation >30 ] <- 7
+table(data6$dc_cat)
+table(data6$catdc)
+
+data6$rev_cat <- cut(data6$Revenu_annuel, breaks = c(0,10000,25000,75000,150000,Inf))
+data6$catrev[data6$Revenu_annuel >0  & data6$Revenu_annuel <= 10000] <- 1
+data6$catrev[data6$Revenu_annuel >10000  & data6$Revenu_annuel <= 25000] <- 2
+data6$catrev[data6$Revenu_annuel >25000  & data6$Revenu_annuel <= 75000] <- 3
+data6$catrev[data6$Revenu_annuel >75000  & data6$Revenu_annuel <= 150000] <- 4
+data6$catrev[data6$Revenu_annuel >150000 ] <- 5
+table(data6$rev_cat)
+table(data6$catrev)
+#variable character en factor
+data6$cattps<-as.factor(data6$cattps)
+data6$catdc<-as.factor(data6$catdc)
+data6$catrev<-as.factor(data6$catrev)
+
+data6$region<-as.factor(data6$region)
+data6$Exercer_en_groupeoui_ou_seul<-as.factor(data6$Exercer_en_groupeoui_ou_seul)
+data6$sexe<- as.factor(data6$sexe)
+data6$Proche_de_la_retraite<- as.factor(data6$Proche_de_la_retraite)
+
+data6$Autre_activité<- as.factor(data6$Autre_activité)
+data6$Médecin_coordonateur_maison_retraite<- as.factor(data6$Médecin_coordonateur_maison_retraite)
+data6$Garde<- as.factor(data6$Garde)
+data6$Médecin_régulateur<- as.factor(data6$Médecin_régulateur)
+
+data6$Consulte_patients<- as.factor(data6$Consulte_patients)
+data6$Rythme_des_rdv<- as.factor(data6$Rythme_des_rdv)
+data6$Intercaler_patients<- as.factor(data6$Intercaler_patients)
+
+data6$Entretien_locaux<- as.factor(data6$Entretien_locaux)
+data6$Secrétariat<- as.factor(data6$Secrétariat)
+
+data6$Couple<- as.factor(data6$Couple)
+data6$Conjoint_sur_marché_du_travail<- as.factor(data6$Conjoint_sur_marché_du_travail)
+data6$Personnes_à_charge<-as.factor(data6$Personnes_à_charge)
+
+
+prop.table(table(data7$region))
+prop.table(table(data7$Exercer_en_groupeoui_ou_seul))
+prop.table(table(data7$sexe))
+prop.table(table(data7$Proche_de_la_retraite))
+
+
+prop.table(table(data7$Autre_activité))
+prop.table(table(data7$Médecin_coordonateur_maison_retraite))
+prop.table(table(data7$Garde))
+prop.table(table(data7$Médecin_régulateur))
+
+
+prop.table(table(data7$Consulte_patients))
+prop.table(table(data7$Rythme_des_rdv))
+prop.table(table(data7$Intercaler_patients))
+
+prop.table(table(data7$Entretien_locaux))
+prop.table(table(data7$Secrétariat))
+
+prop.table(table(data7$Personnes_à_charge))
+prop.table(table(data7$Conjoint_sur_marché_du_travail))
+
+#-----------------------
+#Statistique descriptive
+#-----------------------
+
+
+#Statistique univariée
+summary(data6$Revenu_annuel)
+summary(data6$Durée_consultation)
+summary(data6$Temps_de_travail)
+tab1<-cbind(summary(data6$Revenu_annuel),
+            summary(data6$Durée_consultation),
+            summary(data6$Temps_de_travail))
+stargazer(tab1,title = "Statistiques descriptives data6",colnames = TRUE)
+
+
+#Latex statistique descriptive variable discrète
+#data6
+stargazer(summary(data6$region),title="Région")#FAIRE SUR WORD
+stargazer(summary(data6$Exercer_en_groupeoui_ou_seul),title="Exercer en groupe(oui) ou seul")
+stargazer(summary(data6$sexe),title = "Sexe")
+stargazer(summary(data6$Proche_de_la_retraite),title ="Proche de la retraite" )
+
+stargazer(summary(data6$Autre_activité),title="Autre activité")
+stargazer(summary(data6$Médecin_coordonateur_maison_retraite),title="Médecin coordonateur en maison de retraite")
+stargazer(summary(data6$Garde,title="Garde"))
+stargazer(summary(data6$Médecin_régulateur),title="Médecin régulateur")
+            
+stargazer(summary(data6$Consulte_patients),title="Consultation des patients")
+summary(data6$Consulte_patients)
+stargazer(summary(data6$Rythme_des_rdv),title="Rythme des rendez-vous")
+stargazer(summary(data6$Intercaler_patients),title="Patient intercalé")
+summary(data6$Intercaler_patients)
+
+stargazer(summary(data6$Entretien_locaux),title = "Entretien des locaux")
+stargazer(summary(data6$Secrétariat),title="Secrétariat")            
+
+stargazer(summary(data6$Conjoint_sur_marché_du_travail),title="Situation du conjoint(e) sur marché du travail")
+stargazer(summary(data6$Personnes_à_charge),title="Personne à charge")
+
+#Info en %, à mettre à l'écris
+prop.table(table(data6$region))
+prop.table(table(data6$Exercer_en_groupeoui_ou_seul))
+prop.table(table(data6$sexe))
+prop.table(table(data6$Proche_de_la_retraite))
+
+
+prop.table(table(data6$Autre_activité))
+prop.table(table(data6$Médecin_coordonateur_maison_retraite))
+prop.table(table(data6$Garde))
+prop.table(table(data6$Médecin_régulateur))
+
+
+prop.table(table(data6$Consulte_patients))
+prop.table(table(data6$Rythme_des_rdv))
+prop.table(table(data6$Intercaler_patients))
+
+prop.table(table(data6$Entretien_locaux))
+prop.table(table(data6$Secrétariat))
+
+prop.table(table(data6$Personnes_à_charge))
+prop.table(table(data6$Conjoint_sur_marché_du_travail))
+
+#Tableau contingence
+#TEMPS
+xtable(prop.table(table(data6$region,data6$tps_cat),margin = 1),caption="Tableau de contigence temps de travailregion")
+
+xtable(prop.table(table(data6$Proche_de_la_retraite,data6$tps_cat),margin = 1),caption="Tableau de contigence temps de travail/proche de la retraite")
+xtable(prop.table(table(data6$Exercer_en_groupeoui_ou_seul,data6$tps_cat),margin = 1),caption="Tableau de contigence temps de travail/exerce en groupe ou seul")
+xtable(prop.table(table(data6$sexe,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/sexe")
+
+xtable(prop.table(table(data6$Autre_activité,data6$tps_cat),margin=1),caption = "Tableau de contingence temps de travail/autre activité")
+xtable(prop.table(table(data6$Médecin_coordonateur_maison_retraite,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/médecin en maison retraite") 
+xtable(prop.table(table(data6$Garde,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/garde") 
+xtable(prop.table(table(data6$Médecin_régulateur,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/médecin regulateur")
+
+xtable(prop.table(table(data6$Consulte_patients,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/consulte patients")
+xtable(prop.table(table(data6$Rythme_des_rdv,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/rythme des rdv") 
+xtable(prop.table(table(data6$Intercaler_patients,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/intercaler les patients") 
+
+xtable(prop.table(table(data6$Entretien_locaux,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/entretien locaux") 
+xtable(prop.table(table(data6$Secrétariat,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/secrétarirat") 
+
+xtable(prop.table(table(data6$Personnes_à_charge,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/personnes à charge")
+xtable(prop.table(table(data6$Conjoint_sur_marché_du_travail,data6$tps_cat), margin = 1),caption = "Tableau de contingence temps de travail/conjoint(e) sur marché du travail")
+
+#REVENU
+xtable(prop.table(table(data6$region,data6$rev_cat),margin = 1),caption="Tableau de contigence revenu annuel/region")
+
+xtable(prop.table(table(data6$Proche_de_la_retraite,data6$rev_cat),margin = 1),caption="Tableau de contigence revenu annuel/proche de la retraite")
+xtable(prop.table(table(data6$Exercer_en_groupeoui_ou_seul,data6$rev_cat),margin = 1),caption="Tableau de contigence revenu annuel/exerce en groupe ou seul")
+xtable(prop.table(table(data6$sexe,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/sexe")
+
+xtable(prop.table(table(data6$Autre_activité,data6$rev_cat),margin=1),caption = "Tableau de contingence revenu annuel/autre activité")
+xtable(prop.table(table(data6$Médecin_coordonateur_maison_retraite,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/médecin en maison retraite") 
+xtable(prop.table(table(data6$Garde,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/garde") 
+xtable(prop.table(table(data6$Médecin_régulateur,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/médecin regulateur")
+
+xtable(prop.table(table(data6$Consulte_patients,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/consulte patients")
+xtable(prop.table(table(data6$Rythme_des_rdv,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/rythme des rdv") 
+xtable(prop.table(table(data6$Intercaler_patients,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/intercaler les patients") 
+
+xtable(prop.table(table(data6$Entretien_locaux,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/entretien locaux") 
+xtable(prop.table(table(data6$Secrétariat,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/secrétarirat") 
+
+xtable(prop.table(table(data6$Personnes_à_charge,data6$rev_cat), margin = 1),caption = "Tableau de contingence revenu annuel/personnes à charge")
+xtable(prop.table(table(data6$Conjoint_sur_marché_du_travail,data6$rev_cat), margin = 1),caption = "Tableau de revenu annuel/contingence conjoint(e) sur marché du travail")
+
+#DUREE
+xtable(prop.table(table(data6$region,data6$dc_cat),margin = 1),caption="Tableau de contigence durée consultation/region")
+
+xtable(prop.table(table(data6$Proche_de_la_retraite,data6$dc_cat),margin = 1),caption="Tableau de contigence durée consultation/proche de la retraite")
+xtable(prop.table(table(data6$Exercer_en_groupeoui_ou_seul,data6$dc_cat),margin = 1),caption="Tableau de contigence durée consultation/exerce en groupe ou seul")
+xtable(prop.table(table(data6$sexe,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/sexe")
+
+xtable(prop.table(table(data6$Autre_activité,data6$dc_cat),margin=1),caption = "Tableau de contingence durée consultation/autre activité")
+xtable(prop.table(table(data6$Médecin_coordonateur_maison_retraite,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/médecin en maison retraite") 
+xtable(prop.table(table(data6$Garde,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/garde") 
+xtable(prop.table(table(data6$Médecin_régulateur,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/médecin regulateur")
+
+xtable(prop.table(table(data6$Consulte_patients,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/consulte patients")
+xtable(prop.table(table(data6$Rythme_des_rdv,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/rythme des rdv") 
+xtable(prop.table(table(data6$Intercaler_patients,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/intercaler les patients") 
+
+xtable(prop.table(table(data6$Entretien_locaux,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/entretien locaux") 
+xtable(prop.table(table(data6$Secrétariat,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/secrétarirat") 
+
+xtable(prop.table(table(data6$Personnes_à_charge,data6$dc_cat), margin = 1),caption = "Tableau de contingence durée consultation/personnes à charge")
+xtable(prop.table(table(data6$Conjoint_sur_marché_du_travail,data6$dc_cat), margin = 1),caption = "Tableau de durée consultation/contingence conjoint(e) sur marché du travail")
+
+
+#Variable sous forme logarithme
+data6$logRevenu_annuel<-log(data6$Revenu_annuel)
+
+
+#Histogramme
+hist(data6$Temps_de_travail, col = c("orange"),
+     main = paste("Histogramme du temps de travail"),xlim=range(20,90))
+hist(data6$logRevenu_annuel, col = c("red"),
+     main = paste("Histogramme du revenu annuel"),xlim = range(8,14))
+hist(data6$Durée_consultation, col = c("yellow"),
+     main = paste("Histogramme des durées de consultation"),xlim=range(5,40))
+hist(data6$logDurée_consultation)
+#Boite à moustache
+boxplot(data6$Temps_de_travail~data6$Exercer_en_groupeoui_ou_seul,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$sexe,col = c("orange"))#good
+boxplot(data6$Temps_de_travail~data6$Proche_de_la_retraite,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$Autre_activité,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$Médecin_coordonateur_maison_retraite,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$Garde,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$Médecin_régulateur,col = c("orange"))
+boxplot(data6$Temps_de_travail~data6$Consulte_patients,col = c("orange"))#good
+boxplot(data6$Temps_de_travail~data6$Rythme_des_rdv,col = c("orange"))#good
+boxplot(data6$Temps_de_travail~data6$Intercaler_patients,col = c("orange"))#good
+boxplot(data6$Temps_de_travail~data6$Entretien_locaux,col = c("orange"))#good
+boxplot(data6$Temps_de_travail~data6$Secrétariat,col = c("orange"))#nothing
+boxplot(data6$Temps_de_travail~data6$Personnes_à_charge,col = c("orange"))#bad écart au niveau des quartiles
+boxplot(data6$Temps_de_travail~data6$Conjoint_sur_marché_du_travail,col = c("orange"))#nothing
+
+boxplot(data6$logRevenu_annuel~data6$Exercer_en_groupeoui_ou_seul,col = c("red"))
+boxplot(data6$logRevenu_annuel~data6$sexe,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Proche_de_la_retraite,col = c("red"))#badécart au niveau des quartiles
+boxplot(data6$logRevenu_annuel~data6$Autre_activité,col = c("red"))#badécart au niveau des quartiles
+boxplot(data6$logRevenu_annuel~data6$Médecin_coordonateur_maison_retraite,col = c("red"))
+boxplot(data6$logRevenu_annuel~data6$Garde,col = c("red"))#bad écart au niveau des quartiles
+boxplot(data6$logRevenu_annuel~data6$Médecin_régulateur,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Consulte_patients,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Rythme_des_rdv,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Intercaler_patients,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Entretien_locaux,col = c("red"))#bad écart au niveau des quartiles
+boxplot(data6$logRevenu_annuel~data6$Secrétariat,col = c("red"))#bad écart au niveau des quartiles
+boxplot(data6$logRevenu_annuel~data6$Personnes_à_charge,col = c("red"))#good
+boxplot(data6$logRevenu_annuel~data6$Conjoint_sur_marché_du_travail,col = c("red"))#bad écart au niveau des quartiles
+
+boxplot(data6$Durée_consultation~data6$Exercer_en_groupeoui_ou_seul,col = c("yellow"))
+boxplot(data6$Durée_consultation~data6$sexe,col = c("yellow"))#good
+boxplot(data6$Durée_consultation~data6$Proche_de_la_retraite,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Autre_activité,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Médecin_coordonateur_maison_retraite,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Garde,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Médecin_régulateur,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Consulte_patients,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Rythme_des_rdv,col = c("yellow"))#relation croissante
+boxplot(data6$Durée_consultation~data6$Intercaler_patients,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Entretien_locaux,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Secrétariat,col = c("yellow"))#nothing
+boxplot(data6$Durée_consultation~data6$Personnes_à_charge,col = c("yellow"))#bof
+boxplot(data6$Durée_consultation~data6$Conjoint_sur_marché_du_travail,col = c("yellow"))#nothing 
+      
+
+#Evaluation visuelle de la linéarité
+
+
+scatterplot(Temps_de_travail~logRevenu_annuel, data=data6,
+            main=paste("Linéarité entre temps de travail et revenu annuel"))
+
+
+scatterplot(Temps_de_travail~Durée_consultation, data=data6,
+            main=paste("Linéarité entre temps de travail et durée de consultation"))
+
+
+scatterplot(logRevenu_annuel~Durée_consultation, data=data6, 
+            main=paste("Linéarité entre revenu annuel et durée de consultation"))
+
+#------------
+#Regressions
+#------------
+
+#Catégorie de reference data6:
+table(data6$region)
+table(data6$Exercer_en_groupeoui_ou_seul)#En groupe
+table(data6$sexe)#Masculin
+table(data6$Proche_de_la_retraite)#Non
+table(data6$Autre_activité)#Non
+table(data6$Médecin_coordonateur_maison_retraite)#Non
+table(data6$Garde)#Oui
+table(data6$Médecin_régulateur)#Non
+table(data6$Consulte_patients)#Vous êtes fréquemment conduits à différer des demandes de co
+table(data6$Rythme_des_rdv)#15 minutes
+table(data6$Intercaler_patients)#Tous les jours de consultation
+table(data6$Entretien_locaux)#Autre
+table(data6$Secrétariat)#Oui
+table(data6$Conjoint_sur_marché_du_travail)#Salarié
+table(data6$Personnes_à_charge)#[3;4]
+
+#Modalité de référence
+data6$region=relevel(data6$region,ref="Pays de la Loire")
+data6$Exercer_en_groupeoui_ou_seul = relevel(data6$Exercer_en_groupeoui_ou_seul, ref = "En groupe")
+data6$sexe = relevel(data6$sexe, ref = "Masculin")
+data6$Proche_de_la_retraite = relevel(data6$Proche_de_la_retraite, ref = "Non")
+data6$Autre_activité = relevel(data6$Autre_activité, ref = "Non")
+data6$Médecin_coordonateur_maison_retraite = relevel(data6$Médecin_coordonateur_maison_retraite, ref = "Non")
+data6$Garde = relevel(data6$Garde, ref = "Oui")
+data6$Médecin_régulateur = relevel(data6$Médecin_régulateur, ref = "Non")
+data6$Consulte_patients =relevel(data6$Consulte_patients, ref = "Consulte avec difficulté")
+data6$Rythme_des_rdv = relevel(data6$Rythme_des_rdv, ref = "[10;15]")
+data6$Intercaler_patients = relevel(data6$Intercaler_patients, ref = "Quotidiennement")
+data6$Entretien_locaux = relevel(data6$Entretien_locaux, ref = "Autre")
+data6$Secrétariat = relevel(data6$Secrétariat, ref = "Oui")
+data6$Conjoint_sur_marché_du_travail = relevel(data6$Conjoint_sur_marché_du_travail, ref = "Salarié")
+data6$Personnes_à_charge = relevel(data6$Personnes_à_charge, ref = "[3;4]")
+
+#Regressions pour les MG en générale
+modlmtemps<-lm(Temps_de_travail ~ region+Exercer_en_groupeoui_ou_seul + sexe + Proche_de_la_retraite 
+                                +Autre_activité + Médecin_coordonateur_maison_retraite + Garde + Médecin_régulateur
+                                +Consulte_patients + Rythme_des_rdv + Intercaler_patients
+                                + Entretien_locaux + Secrétariat
+                                + Conjoint_sur_marché_du_travail + Personnes_à_charge, data = data6)
+summary(modlmtemps)
+
+modlmtempsregion<-lm(Temps_de_travail~region,data = data6)
+summary(modlmtempsregion)
+
+modlmtempsmed<-lm(Temps_de_travail~Exercer_en_groupeoui_ou_seul+sexe+Proche_de_la_retraite,data=data6)
+summary(modlmtempsmed)
+
+modlmtempsactivite<-lm(Temps_de_travail~Autre_activité + Médecin_coordonateur_maison_retraite + Garde +Médecin_régulateur ,data=data6)
+summary(modlmtempsactivite)
+
+modlmtempsconsul<-lm(Temps_de_travail~Consulte_patients + Rythme_des_rdv + Intercaler_patients,data=data6)
+summary(modlmtempsconsul)
+
+modlmtempsgestion<-lm(Temps_de_travail~Entretien_locaux + Secrétariat,data=data6)
+summary(modlmtempsgestion)
+
+modlmtempsfamille<-lm(Temps_de_travail~Conjoint_sur_marché_du_travail + Personnes_à_charge, data = data6)
+summary(modlmtempsfamille)
+
+stargazer(modlmtempsregion)
+stargazer(modlmtempsmed)
+stargazer(modlmtempsactivite)
+stargazer(modlmtempsconsul)
+stargazer(modlmtempsgestion)
+stargazer(modlmtempsfamille)
+#
+modlmrev<-lm(logRevenu_annuel ~region+Exercer_en_groupeoui_ou_seul + sexe + Proche_de_la_retraite 
+                  + Autre_activité+ Médecin_coordonateur_maison_retraite + Garde + Médecin_régulateur 
+                  + Consulte_patients + Rythme_des_rdv + Intercaler_patients
+                  + Entretien_locaux + Secrétariat
+                  + Conjoint_sur_marché_du_travail + Personnes_à_charge, data = data6)
+summary(modlmrev)
+stargazer(modlmrev)
+
+modlmrevregion<-lm(logRevenu_annuel~region,data = data6)
+summary(modlmrevregion)
+
+modlmrevmed<-lm(logRevenu_annuel~Exercer_en_groupeoui_ou_seul+sexe+Proche_de_la_retraite,data=data6)
+summary(modlmrevmed)
+
+modlmrevactivite<-lm(logRevenu_annuel~Autre_activité + Médecin_coordonateur_maison_retraite + Garde + Médecin_régulateur ,data=data6)
+summary(modlmrevactivite)
+
+modlmrevconsul<-lm(logRevenu_annuel~Consulte_patients + Rythme_des_rdv + Intercaler_patients,data=data6)
+summary(modlmrevconsul)
+
+modlmrevgestion<-lm(logRevenu_annuel~Entretien_locaux + Secrétariat,data=data6)
+summary(modlmrevgestion)
+
+modlmrevfamille<-lm(logRevenu_annuel~Conjoint_sur_marché_du_travail + Personnes_à_charge, data = data6)
+summary(modlmrevfamille)
+mtable(modlmrevmed,modlmrevactivite,modlmrevconsul,modlmrevfamille,modlmrevgestion)
+
+stargazer(modlmrevregion)
+stargazer(modlmrevmed)
+stargazer(modlmrevactivite)
+stargazer(modlmrevconsul)
+stargazer(modlmrevgestion)
+stargazer(modlmrevfamille)
+
+#
+
+data6$nbrconsulparsem<-((data6$Temps_de_travail)*60)/data6$Durée_consultation
+data6$nbrconsulparan<-(data6$nbrconsulparsem*50)
+
+
+data6$nbr_consult_par_an_cat <- cut(data6$nbrconsulparan, breaks = c(0,3000,4000,5000,Inf))
+
+
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >5000 ] <- 1
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >0  & data6$nbrconsulparan <= 3000] <- 4
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >3000  & data6$nbrconsulparan <= 4000] <- 3
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >4000  & data6$nbrconsulparan <= 5000] <- 2
+
+table(data6$nbr_consult_par_an_cat)
+table(data6$cat_nbr_consult_par_an)
+data6$cat_nbr_consult_par_an <- as.factor(data6$cat_nbr_consult_par_an)
+
+#data6$dureeconsult_cat =relevel(data6$dureeconsult_cat, ref = "Plus de 5 000 consultations")
+
+modlmdureeconsultation<-lm(Durée_consultation~sexe+cat_nbr_consult_par_an,data=data6)
+summary(modlmdureeconsultation)
+stargazer(modlmdureeconsultation)
+boxplot(data6$Durée_consultation~data6$nbr_consult_par_an_cat,col = c("yellow"))
+modlmdureeconsultation2<-lm(Durée_consultation~region, data=data6)
+summary(modlmdureeconsultation2)
+stargazer(modlmdureeconsultation2)
+
+#TRAVAIL COMPLEMENTAIRE
+library("readxl")
+library(dplyr)
+library(tidyselect)
+library(data.table)
+library(stargazer)
+library(car)
+library(forcats)
+library(xtable)
+library(Hmisc)
+library(tables)
+#-------------------
+#Importation données
+#-------------------
+data<- read_excel("C:/Users/PC/Desktop/travail annif/Re Choix de Mémoire DCarver/base de données.xlsx")
+
+
+#-----------------------
+#Manipulation de données
+#-----------------------
+
+#Création de deux variables en combinant plusieurs variables pour le premier et une simplification pour le deuxieme
+
+#Si travail dans un autre établissement de santé; oui=1 et non=0
+data$s2_21<-if_else(data$s2_21_1=="Oui"|
+                      data$s2_21_2=="Oui"|
+                      data$s2_21_3=="Oui"|
+                      data$s2_21_1=="Oui"|
+                      data$s2_21_1=="Oui"|
+                      data$s2_21_1=="Oui"|
+                      data$s2_21_1=="Oui","Oui","Non")
+
+#Si n'ettoie eux-meme leur locaux=1 sinon non=0
+data$s1_18_1bis<-if_else(data$s1_18_1=="Vous-même","Moi-même","Autre")
+
+#Prend uniquement les variables qui m'intéresse
+data1<- subset(data,select = c(region,s1_1,s2_30,s3_10,s3_10_1,s2_37,s2_37_1,sexe,s4_2,s2_21,s2_19,
+                               s2_15,s2_13,s2_32,s2_40,s2_39,s1_18_1bis,s1_21,s3_5_1,
+                               s3_5_2,s3_3_2))
+#Critères de sélection 1
+#Eliminie données manquantes
+#obs aberrantes rev
+data4<-subset(data1, s3_10!=999999)
+data4<-subset(data2, s3_10_1!="ne sait pas (ne pas citer)")
+data4<-subset(data3, s3_10_1!="NR")
+data4<-subset(data4,s3_10!=999998)
+#obs aberrantes temps
+data4<-subset(data4, s2_30!=99)
+data4<-subset(data4, s2_30!=98)
+data4<-subset(data4, s2_30!=0)
+data4<-subset(data4, s2_30!=".")
+#obs aberrantes duree
+data4<-subset(data4,s2_37!=99)
+data4<-subset(data4,s2_37!=98)
+
+#Proportion des observations aberrantes
+###Profil observations aberrantes
+#temps de travail aberrante
+data44<-subset(data1,s3_10=="999999"|s3_10=="999998")
+data45<-subset(data1,s2_30=="99"|s2_30=="98"|s2_30=="0"|s2_30==".")
+data46<-subset(data1,s2_37=="99"|s2_37=="98")
+data47<-subset(data1,s3_10_1=="ne sait pas (ne pas citer)"|s3_10_1=="NR")
+
+xtable(table(data44$s3_10))
+xtable(table(data45$s2_30))
+xtable(table(data46$s2_37))
+xtable(table(data47$s3_10_1))
+
+#Attribue revenu moyen aux observations manquantes
+data4[data4$s3_10_1=="Moins de 25 000 (moins de 164 000 Francs)",]$s3_10<-12500
+data4[data4$s3_10_1=="De 25 000 à 50 000 (de 164 000 à 328000 F)",]$s3_10<- 37500
+data4[data4$s3_10_1=="De 50 000 à 75 000 (de 328 000 à 4682 000F)",]$s3_10<- 62500
+data4[data4$s3_10_1=="De 75 000 à 100 000 (de 492 000 à 656 000F)",]$s3_10<- 87500
+data4[data4$s3_10_1=="De 100 000 à 150 000 (de 656 000 à 984 000F",]$s3_10<- 125000
+data4[data4$s3_10_1=="De 150 000 à 200 000 (de 984 000 à 1 312 00",]$s3_10<- 175000
+data4[data4$s3_10_1=="200 000 ou plus (plus de 1 312 000 F)",]$s3_10<- 200000
+
+#Somme des personnes à charge
+data4$s3_5<-data4$s3_5_1+data4$s3_5_2
+#Base de données final
+data5<-subset(data4,select = c(region,s1_1,s2_30,s3_10,s2_37,sexe,s4_2,s2_21,s2_19,
+                               s2_15,s2_13,s2_32,s2_40,s2_39,s1_18_1bis,s1_21,s3_5,
+                               s3_3_2))
+
+setnames(data5,c("region","s1_1","s2_30","s3_10","s2_37","s4_2","s2_21","s2_19","s2_15","s2_13","s2_32","s2_40","s2_39","s1_18_1bis",
+                 "s1_21","s3_5","s3_3_2"),
+         c("region","Exercer_en_groupeoui_ou_seul","Temps_de_travail","Revenu_annuel","Durée_consultation","Proche_de_la_retraite","Autre_activité","Médecin_coordonateur_maison_retraite",
+           "Garde","Médecin_régulateur","Consulte_patients","Rythme_fixer_rdv","Intercaler_patients","Entretien_locaux",
+           "Secrétariat","Personnes_à_charge","Conjoint_sur_marché_du_travail"))
+data5<-subset(data5, Proche_de_la_retraite!="NR")
+data5<-subset(data5, Proche_de_la_retraite!="NSP")
+data5<-subset(data5, Proche_de_la_retraite!="Oui, pour exercer uniquement comme m")
+data5<-subset(data5, Proche_de_la_retraite!="Oui, pour changer d'activité profess")
+
+data5$Temps_de_travail<-as.numeric(data5$Temps_de_travail)
+#Critères de sélection 2
+data6<-na.omit(data5)
+data6<-subset(data6, Exercer_en_groupeoui_ou_seul!="Non")
+data6$Exercer_en_groupeoui_ou_seul<-if_else(data6$Exercer_en_groupeoui_ou_seul=="Oui","En groupe","Seul")
+data6<-subset(data6, Personnes_à_charge!="7")
+data6<-subset(data6, Personnes_à_charge!="8")
+data6<-subset(data6, Personnes_à_charge!="10")
+data6<-subset(data6, Personnes_à_charge!="16")
+data6<-subset(data6, Personnes_à_charge!="30")
+data6[data6$Rythme_fixer_rdv==".",]$Rythme_fixer_rdv<-"NR"
+data6[data6$Rythme_fixer_rdv=="NSP",]$Rythme_fixer_rdv<-"NR"
+data6<-subset(data6,Intercaler_patients!="." )
+data6<-subset(data6, Rythme_fixer_rdv!="NR")
+data6<-subset(data6, Consulte_patients!="NR")
+data6<-subset(data6, Médecin_régulateur!="NR")
+data6[data6$Conjoint_sur_marché_du_travail==".",]$Conjoint_sur_marché_du_travail<-"NR"
+data6[data6$Conjoint_sur_marché_du_travail=="NSP",]$Conjoint_sur_marché_du_travail<-"NR"
+
+
+#Tasser les modalités
+data6$Intercaler_patients[data6$Intercaler_patients=="De temps en temps"]<- "Rarement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Jamais ou exceptionnellement"]<- "Rarement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Tous les jours de consultation"]<- "Quotidiennement"
+data6$Intercaler_patients[data6$Intercaler_patients=="Toutes les semaines"]<-"Quotidiennement"
+
+data6$Personnes_à_charge[data6$Personnes_à_charge=="1"]<-"1"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="2"]<-"2"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="3"]<-"[3;4]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="4"]<-"[3;4]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="5"]<-"[5;6]"
+data6$Personnes_à_charge[data6$Personnes_à_charge=="6"]<-"[5;6]"
+
+data6$Rythme_fixer_rdv[data6$Rythme_fixer_rdv=="10 minutes"]<-"fixe rdv chaque 10/15 min"
+data6$Rythme_fixer_rdv[data6$Rythme_fixer_rdv=="15 minutes"]<-"fixe rdv chaque 10/15 min"
+data6$Rythme_fixer_rdv[data6$Rythme_fixer_rdv=="20 minutes"]<-"fixe rdv chaque 20/30/40 min"
+data6$Rythme_fixer_rdv[data6$Rythme_fixer_rdv=="30 minutes"]<-"fixe rdv chaque 20/30/40 min"
+data6$Rythme_fixer_rdv[data6$Rythme_fixer_rdv=="40 minutes"]<-"fixe rdv chaque 20/30/40 min"
+
+
+data6$Consulte_patients[data6$Consulte_patients=="Vous êtes fréquemment conduits à différer des demandes de co"]<-"Consulte avec difficulté"
+data6$Consulte_patients[data6$Consulte_patients=="Vous recevez tout le monde mais vous devez pour cela travail"]<-"Consulte avec difficulté"
+data6$Consulte_patients[data6$Consulte_patients=="Vous parvenez à voir tous les patients qui vous sollicitent"]<-"Consulte sans difficulté"
+
+data6$region[data6$region=="BRE"]<-"Bretagne"
+data6$region[data6$region=="PDL"]<-"Pays de la Loire"
+data6$region[data6$region=="PAY"]<-"Pays de la Loire"
+data6$region[data6$region=="BAN"]<-"Normandie"
+data6$region[data6$region=="HAN"]<-"Normandie"
+data6$region[data6$region=="NOR"]<-"Hauts-de-France"
+data6$region[data6$region=="NOR1"]<-"Hauts-de-France"
+data6$region[data6$region=="PACA"]<-"Hauts-de-France"
+data6$region[data6$region=="PIC"]<-"Hauts-de-France"
+data6$region[data6$region=="PIC1"]<-"Hauts-de-France"
+data6$region[data6$region=="IDF"]<-"Ile de France"
+data6$region[data6$region=="IDF1"]<-"Ile de France"
+data6$region[data6$region=="ALS"]<-"Grand Est"
+data6$region[data6$region=="CHA"]<-"Grand Est"
+data6$region[data6$region=="CHA1"]<-"Grand Est"
+data6$region[data6$region=="LOR"]<-"Grand Est"
+data6$region[data6$region=="LOR1"]<-"Grand Est"
+data6$region[data6$region=="CEN"]<-"Centre"
+data6$region[data6$region=="CEN1"]<-"Centre"
+data6$region[data6$region=="BOU"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="BOU1"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="FRA"]<-"Bourgogne-Franche-Comté"
+data6$region[data6$region=="AQU"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="AQU1"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="LIM"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="LIM1"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="POI"]<-"Nouvelle Aquitaine"
+data6$region[data6$region=="AUV"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="AUV1"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="RHO"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="RHO1"]<-"Auvergne-Rhone-Alpes"
+data6$region[data6$region=="LAN"]<-"Occitanie"
+data6$region[data6$region=="LAN1"]<-"Occitanie"
+data6$region[data6$region=="MID"]<-"Occitanie"
+data6$region[data6$region=="PRO"]<-"Provence-Alpes-Cote d'Azur"
+
+#variable discrétiser
+
+data6$tps_cat <- cut(data6$Temps_de_travail, breaks = c(0,35,45,55,65,75,85,Inf))
+data6$cattps[data6$Temps_de_travail >0  & data6$Temps_de_travail <= 35] <- 1
+data6$cattps[data6$Temps_de_travail >35  & data6$Temps_de_travail <= 45] <- 2
+data6$cattps[data6$Temps_de_travail >45  & data6$Temps_de_travail <= 55] <- 3
+data6$cattps[data6$Temps_de_travail >55  & data6$Temps_de_travail <= 65] <- 4
+data6$cattps[data6$Temps_de_travail >65  & data6$Temps_de_travail <= 75] <- 5
+data6$cattps[data6$Temps_de_travail >75  & data6$Temps_de_travail <= 85] <- 6
+data6$cattps[data6$Temps_de_travail >85 ] <- 7
+table(data6$tps_cat)
+table(data6$cattps)
+
+data6$dc_cat <- cut(data6$Durée_consultation, breaks = c(0,5,10,15,20,25,30,Inf))
+data6$catdc[data6$Durée_consultation >0  & data6$Durée_consultation <= 5] <- 1
+data6$catdc[data6$Durée_consultation >5  & data6$Durée_consultation <= 10] <- 2
+data6$catdc[data6$Durée_consultation >10  & data6$Durée_consultation <= 15] <- 3
+data6$catdc[data6$Durée_consultation >15  & data6$Durée_consultation <= 20] <- 4
+data6$catdc[data6$Durée_consultation >20  & data6$Durée_consultation <= 25] <- 5
+data6$catdc[data6$Durée_consultation >25  & data6$Durée_consultation <= 30] <- 6
+data6$catdc[data6$Durée_consultation >30 ] <- 7
+table(data6$dc_cat)
+table(data6$catdc)
+
+data6$rev_cat <- cut(data6$Revenu_annuel, breaks = c(0,10000,25000,75000,150000,Inf))
+data6$catrev[data6$Revenu_annuel >0  & data6$Revenu_annuel <= 10000] <- 1
+data6$catrev[data6$Revenu_annuel >10000  & data6$Revenu_annuel <= 25000] <- 2
+data6$catrev[data6$Revenu_annuel >25000  & data6$Revenu_annuel <= 75000] <- 3
+data6$catrev[data6$Revenu_annuel >75000  & data6$Revenu_annuel <= 150000] <- 4
+data6$catrev[data6$Revenu_annuel >150000 ] <- 5
+table(data6$rev_cat)
+table(data6$catrev)
+#variable character en factor
+data6$cattps<-as.factor(data6$cattps)
+data6$catdc<-as.factor(data6$catdc)
+data6$catrev<-as.factor(data6$catrev)
+
+data6$region<-as.factor(data6$region)
+data6$Exercer_en_groupeoui_ou_seul<-as.factor(data6$Exercer_en_groupeoui_ou_seul)
+data6$sexe<- as.factor(data6$sexe)
+data6$Proche_de_la_retraite<- as.factor(data6$Proche_de_la_retraite)
+
+data6$Autre_activité<- as.factor(data6$Autre_activité)
+data6$Médecin_coordonateur_maison_retraite<- as.factor(data6$Médecin_coordonateur_maison_retraite)
+data6$Garde<- as.factor(data6$Garde)
+data6$Médecin_régulateur<- as.factor(data6$Médecin_régulateur)
+
+data6$Consulte_patients<- as.factor(data6$Consulte_patients)
+data6$Rythme_fixer_rdv<- as.factor(data6$Rythme_fixer_rdv)
+data6$Intercaler_patients<- as.factor(data6$Intercaler_patients)
+
+data6$Entretien_locaux<- as.factor(data6$Entretien_locaux)
+data6$Secrétariat<- as.factor(data6$Secrétariat)
+
+data6$Conjoint_sur_marché_du_travail<- as.factor(data6$Conjoint_sur_marché_du_travail)
+data6$Personnes_à_charge<-as.factor(data6$Personnes_à_charge)
+data6$logRevenu_annuel<-log(data6$Revenu_annuel)
+
+#
+summary(data6$logRevenu_annuel)
+summary(data6$Temps_de_travail)
+summary(data6$Durée_consultation)
+
+#test student
+ttest0<-t.test(data6$logRevenu_annuel~data6$sexe)
+ttest1<-t.test(data6$logRevenu_annuel~data6$Proche_de_la_retraite)
+ttest2<-t.test(data6$logRevenu_annuel~data6$Autre_activité)
+ttest3<-t.test(data6$logRevenu_annuel~data6$Médecin_coordonateur_maison_retraite)
+ttest4<-t.test(data6$logRevenu_annuel~data6$Garde)
+ttest5<-t.test(data6$logRevenu_annuel~data6$Médecin_régulateur)
+ttest6<-t.test(data6$logRevenu_annuel~data6$Consulte_patients)
+ttest7<-t.test(data6$logRevenu_annuel~data6$Rythme_fixer_rdv)
+ttest8<-t.test(data6$logRevenu_annuel~data6$Intercaler_patients)
+ttest9<-t.test(data6$logRevenu_annuel~data6$Secrétariat)
+ttest10<-t.test(data6$logRevenu_annuel~data6$Entretien_locaux)
+dfttest <- data.frame(`conf.int` = c(ttest0$conf.int,ttest1$conf.int, ttest2$conf.int,ttest3$conf.int,ttest4$conf.int,
+                                     ttest5$conf.int,ttest6$conf.int,ttest7$conf.int,ttest8$conf.int,ttest9$conf.int,ttest10$conf.int))
+#dfttest <- data.frame(`p value` = c(ttest0$p.value,ttest1$p.value, ttest2$p.value,ttest3$p.value,ttest4$p.value,
+#ttest5$p.value,ttest6$p.value,ttest7$p.value,ttest8$p.value,ttest9$p.value,ttest10$p.value))
+#dfttest <- data.frame(`estimate` = c(ttest0$estimate,ttest1$estimate, ttest2$estimate,ttest3$estimate,ttest4$estimate,
+#ttest5$estimate,ttest6$estimate,ttest7$estimate,ttest8$estimate,ttest9$estimate,ttest10$estimate))
+
+xtable(dfttest,caption   = "Test de Student")
+
+t.test(data6$logRevenu_annuel~data6$sexe)
+t.test(data6$logRevenu_annuel~data6$Exercer_en_groupeoui_ou_seul)
+t.test(data6$logRevenu_annuel~data6$Proche_de_la_retraite)
+t.test(data6$logRevenu_annuel~data6$Autre_activité)
+t.test(data6$logRevenu_annuel~data6$Médecin_coordonateur_maison_retraite)
+t.test(data6$logRevenu_annuel~data6$Garde)
+t.test(data6$logRevenu_annuel~data6$Médecin_régulateur)
+t.test(data6$logRevenu_annuel~data6$Consulte_patients)
+t.test(data6$logRevenu_annuel~data6$Rythme_fixer_rdv)
+t.test(data6$logRevenu_annuel~data6$Intercaler_patients)
+t.test(data6$logRevenu_annuel~data6$Secrétariat)
+t.test(data6$logRevenu_annuel~data6$Entretien_locaux)
+
+#Statistique univariée
+tab1<-summary(data6$logRevenu_annuel)
+
+tab1<-summary(data6$logRevenu_annuel)
+
+stargazer(tab1,title = "Statistiques descriptives logRevenu",colnames = TRUE)
+
+
+hist(data6$logRevenu_annuel, col = c("red"),
+     main = paste("Histogramme du revenu annuel"),xlim = range(8,14))
+
+
+#------------
+#Regressions
+#------------
+
+#Catégorie de reference data6:
+table(data6$Exercer_en_groupeoui_ou_seul)#En groupe
+table(data6$sexe)#Masculin
+table(data6$Proche_de_la_retraite)#Non
+table(data6$Autre_activité)#Non
+table(data6$Médecin_coordonateur_maison_retraite)#Non
+table(data6$Garde)#Oui
+table(data6$Médecin_régulateur)#Non
+table(data6$Consulte_patients)#Consulte avec difficulté
+table(data6$Rythme_fixer_rdv)#fixe rdv chaque 10/15
+table(data6$Intercaler_patients)#Quotidiennement
+table(data6$Entretien_locaux)#Autre
+table(data6$Secrétariat)#Oui
+table(data6$Conjoint_sur_marché_du_travail)#Salarié
+table(data6$Personnes_à_charge)#[3;4]
+
+#Modalité de référence
+data6$Exercer_en_groupeoui_ou_seul = relevel(data6$Exercer_en_groupeoui_ou_seul, ref = "En groupe")
+data6$sexe = relevel(data6$sexe, ref = "Masculin")
+data6$Proche_de_la_retraite = relevel(data6$Proche_de_la_retraite, ref = "Non")
+data6$Autre_activité = relevel(data6$Autre_activité, ref = "Non")
+data6$Médecin_coordonateur_maison_retraite = relevel(data6$Médecin_coordonateur_maison_retraite, ref = "Non")
+data6$Garde = relevel(data6$Garde, ref = "Oui")
+data6$Médecin_régulateur = relevel(data6$Médecin_régulateur, ref = "Non")
+data6$Consulte_patients =relevel(data6$Consulte_patients, ref = "Consulte avec difficulté")
+data6$Rythme_fixer_rdv = relevel(data6$Rythme_fixer_rdv, ref = "fixe rdv chaque 10/15 min")
+data6$Intercaler_patients = relevel(data6$Intercaler_patients, ref = "Quotidiennement")
+data6$Entretien_locaux = relevel(data6$Entretien_locaux, ref = "Autre")
+data6$Secrétariat = relevel(data6$Secrétariat, ref = "Oui")
+data6$Conjoint_sur_marché_du_travail = relevel(data6$Conjoint_sur_marché_du_travail, ref = "Salarié")
+data6$Personnes_à_charge = relevel(data6$Personnes_à_charge, ref = "[3;4]")
+
+
+#
+data6$nbrconsulparsem<-((data6$Temps_de_travail)*60)/data6$Durée_consultation
+data6$nbrconsulparan<-(data6$nbrconsulparsem*50)
+
+
+data6$nbr_consult_par_an_cat <- cut(data6$nbrconsulparan, breaks = c(0,3000,4000,5000,Inf))
+
+
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >5000 ] <- 1
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >0  & data6$nbrconsulparan <= 3000] <- 4
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >3000  & data6$nbrconsulparan <= 4000] <- 3
+data6$cat_nbr_consult_par_an[data6$nbrconsulparan >4000  & data6$nbrconsulparan <= 5000] <- 2
+
+table(data6$nbr_consult_par_an_cat)
+table(data6$cat_nbr_consult_par_an)
+data6$cat_nbr_consult_par_an <- as.factor(data6$cat_nbr_consult_par_an)
+
+modlmrev<-lm(logRevenu_annuel ~ sexe
+             + Consulte_patients + Rythme_fixer_rdv + Intercaler_patients+Entretien_locaux
+             +Temps_de_travail+Durée_consultation, data = data6)
+summary(modlmrev)
+stargazer(modlmrev)
+
+
